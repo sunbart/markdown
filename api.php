@@ -17,7 +17,6 @@ foreach($_GET as $key => $value){
 }
 
 $functions = get_defined_functions()['user'];
-print_r($functions);
 $found = false;
   
 foreach($functions as $functionName){    
