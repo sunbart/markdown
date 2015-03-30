@@ -16,11 +16,14 @@ function hello($name){
 
 function parsedown($input){
   $Parsedown = new Parsedown();
-  $output = ($Parsedown->text($input));
   
-  savedocument($input);
+  //savedocument($input);
   
-  echo('{"result" : "' . $output . '"}');  
+  $json = array(
+    'result' => $Parsedown->text($input)
+  );
+  
+  echo(json_encode($json));  
 }
 
 function saveDocument($text){
