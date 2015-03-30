@@ -1,5 +1,6 @@
 <?php
 
+require_once 'diff/Diff.php';
 /**
 * the document base class.
 * @author Sergelia
@@ -15,6 +16,7 @@ class Document
 		$this->editor 		= '';
 		$this->latest		= '';
 		$this->timestamp 	= new DateTime();
+		$this->version 		= new Version($this->timestamp);
 		$this->dbh 			= new PDO('mysql:host=localhost;dbname=wa_cms', 'root', '');
 		$this->error 		= new Error();
 	}
@@ -40,7 +42,19 @@ class Document
 		try {
 			$set_doc_res = $set_doc_obj->execute();
 			$this->id = $this->dbh->lastInsertID();
-			$first_version = new Version($this->id, $body);
+			$this->version->getNum($this->id)->setData($body)->push();
+		} catch (PDOException $e) {
+			$this->error->add($this->timestamp, $e->message);
+			return 0;
+		}
+	}
+	function setVersion($vernum) {
+		$set_dver_query = "UPDATE document (version) VALUES (:version) WHERE guid = :guid";
+		$set_dver_obj = $this->dbh->prepare($set_dver_query);
+		$set_dver_obj->bindParams(':version' => $vernum, ':guid' => $this->id);
+		try {
+			$set_dver_res = $set_dver_obj->execute();
+			$this->version = $this->version->getVer($vernum);
 		} catch (PDOException $e) {
 			$this->error->add($this->timestamp, $e->message);
 			return 0;
@@ -58,9 +72,110 @@ class Document
 		}
 	}
 
-
 }
 
+/**
+* 
+*/
+class Version
+{
+	
+	function __construct($timestamp)
+	{
+		$this->start 	= $timestamp;
+		$this->alter 	= new DateTime();
+		$this->guid 	= '';
+		$this->num 		= '';
+		$this->data 	= '';
+		$this->diff 	= (double) 0;
+		$this->change 	= false;
+	}
+	function setData($data) {
+		if($this->data == '') {
+			$this->data = $data;
+		}
+	}
+	function getNum($guid) {
+		$get_ver_query = "SELECT ver_number FROM version WHERE version.guid = :guid";
+		$get_ver_obj = $this->dbh->prepare($get_ver_query);
+		$get_ver_obj->bindParam(':guid', $guid);
+		try {
+			$get_ver_res = $get_ver_obj->execute();
+			if ($get_ver_res->rowCount() > 0) {
+			 	$this->num = $get_ver_res->rowCount() + 1;
+			} else {
+				$this->guid = $guid;
+			   $this->num = 0;
+			}
+		} catch (PDOException $e) {
+			$this->error->add($this->timestamp, $e->message);
+			return 0;
+		}
+	}
+	function getVer($num) {
+		$get_ver_query = "SELECT * FROM version WHERE version.guid = :guid AND version.num = :num";
+		$get_ver_obj = $this->dbh->prepare($get_ver_query);
+		$get_ver_obj->bindParams(':guid' => $guid, ':num' => $num);
+		try {
+			$get_ver_res = $get_ver_obj->execute();
+			if ($get_ver_res->rowCount() > 0) {
+			 	$this->num = $num;
+			 	$this->data = $get_ver_res->body;
+			 	$this->guid = $get_ver_res->guid;
+			} else {
+			   $this->num = 0;
+			}
+		} catch (PDOException $e) {
+			$this->error->add($this->timestamp, $e->message);
+			return 0;
+		}
+	}
+	function getDiff($prev, $data) {
+		if ($prev == '' && $data == '') {
+			$this->diff == 100;
+		} else {
+			Diff::compare($prev, $data, &$this->diff);
+		}
+		if ($this->diff < 90.000) {
+			$this->change = true;
+		} else {
+			$this->change = false;
+		}
+		return $this->change;
+	}
+	function push() {
+		if ($this->guid !== 0 && !empty($this->guid) && !empty($this->data)) {
+			$ver_query = 'INSERT INTO version (guid, body) VALUES (:guid, :body)';
+			$ver_obj = $this->dbh->prepare($ver_query);
+			$ver_obj->bindParams(':guid' => $this->guid, ':body' => $this->data);
+			try {
+				$ver_res = $ver_obj->execute();
+				if ($ver_res->rowCount() > 0) {
+				 	$document = new Document();
+				 	$document->getDocument($guid);
+				 	$document->setVersion($this->num);
+				} else {
+				   $this->num = 0;
+				}
+			} catch(PDOException $e) {
+				$this->error->add($this->timestamp, $e->message);
+				return 0;
+			}
+		}
+	}
+	function compare() {
+		if ($this->num !== 0) {
+			$old_data = getVerBody($this->num - 1);
+
+			$diff = $this->getDiff($old_data, $this->data);
+			if ($diff == true) {
+				$this->push();
+			}
+		} else {
+			$this->push();
+		}
+	}
+}
 /**
 * the author base class.
 * @author Sergelia
