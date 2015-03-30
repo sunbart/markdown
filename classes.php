@@ -26,23 +26,47 @@ class Document
 		$get_doc_obj = $this->dbh->prepare($get_doc_query);
 		$get_doc_obj->bindParam(':id', $id);
 		try {
-			$get_doc_res = $get_doc_obj->execute();
-			$this->author = $this->author->getAuthor($get_doc_obj->author_id);
-			$this->timestamp = $get_doc_obj->startdate;
-			$this->latest = $get_doc_obj->latest;
+			$get_doc_obj->execute();
+			$get_doc_res = $get_doc_obj->fetch();
+			var_dump($get_doc_res);
+			$this->author = $this->author->getAuthor($get_doc_res->author_id);
+			$this->timestamp = $get_doc_res->startdate;
+			$this->latest = $get_doc_res->latest;
 		} catch (PDOException $e) {
 			$this->error->add($this->timestamp, $e->message);
 			return 0;
 		}
 	}
-	function setDocument($author, $body) {
-		$set_doc_query = "INSERT INTO document (author) VALUES (:author)";
-		$set_doc_obj = $this->dbh->prepare($set_doc_query);
-		$set_doc_obj->bindParam(':author', $author);
+	function getVersion() {
+		$get_doc_query = "SELECT version.body FROM document, version WHERE document.guid = :id AND document.guid = version.guid ORDER BY version.num DESC LIMIT 1";
+		$get_doc_obj = $this->dbh->prepare($get_doc_query);
+		$get_doc_obj->bindParam(':id', $this->id);
 		try {
-			$set_doc_res = $set_doc_obj->execute();
+			$get_doc_obj->execute();
+			$get_doc_res = $get_doc_obj->fetch();
+			var_dump($get_doc_obj);
+			return $get_doc_res;
+			// $this->latest = $get_doc_obj->latest;
+		} catch (PDOException $e) {
+			$this->error->add($this->timestamp, $e->message);
+			return 0;
+		}
+	}
+	function setDocument($body) {
+		$set_doc_query = "INSERT INTO document (author_id) VALUES (:author_id)";
+		$set_doc_obj = $this->dbh->prepare($set_doc_query);
+		$author = 1;
+		$set_doc_obj->bindParam(':author_id', $author);
+
+		try {
+			$set_doc_obj->execute();
+			var_dump($set_doc_obj);
+			$set_doc_res = $set_doc_obj->fetch();
+			var_dump($set_doc_res);
 			$this->id = $this->dbh->lastInsertID();
-			$this->version->getNum($this->id)->setData($body)->push();
+			$this->version->getNum($this->id);
+			$this->version->setData($body);
+			$this->version->push();
 		} catch (PDOException $e) {
 			$this->error->add($this->timestamp, $e->message);
 			return 0;
@@ -51,7 +75,8 @@ class Document
 	function setVersion($vernum) {
 		$set_dver_query = "UPDATE document (version) VALUES (:version) WHERE guid = :guid";
 		$set_dver_obj = $this->dbh->prepare($set_dver_query);
-		$set_dver_obj->bindParams(':version' => $vernum, ':guid' => $this->id);
+		$set_dver_obj->bindParam(':version', $vernum);
+		$set_dver_obj->bindParam(':guid', $this->id);
 		try {
 			$set_dver_res = $set_dver_obj->execute();
 			$this->version = $this->version->getVer($vernum);
@@ -89,6 +114,7 @@ class Version
 		$this->data 	= '';
 		$this->diff 	= (double) 0;
 		$this->change 	= false;
+		$this->dbh 		= new PDO('mysql:host=localhost;dbname=wa_cms', 'root', '');
 	}
 	function setData($data) {
 		if($this->data == '') {
@@ -101,8 +127,8 @@ class Version
 		$get_ver_obj->bindParam(':guid', $guid);
 		try {
 			$get_ver_res = $get_ver_obj->execute();
-			if ($get_ver_res->rowCount() > 0) {
-			 	$this->num = $get_ver_res->rowCount() + 1;
+			if ($get_ver_obj->rowCount() > 0) {
+			 	$this->num = $get_ver_obj->rowCount() + 1;
 			} else {
 				$this->guid = $guid;
 			   $this->num = 0;
@@ -115,7 +141,8 @@ class Version
 	function getVer($num) {
 		$get_ver_query = "SELECT * FROM version WHERE version.guid = :guid AND version.num = :num";
 		$get_ver_obj = $this->dbh->prepare($get_ver_query);
-		$get_ver_obj->bindParams(':guid' => $guid, ':num' => $num);
+		$get_ver_obj->bindParam(':guid', $guid);
+		$get_ver_obj->bindParam(':num', $num);
 		try {
 			$get_ver_res = $get_ver_obj->execute();
 			if ($get_ver_res->rowCount() > 0) {
@@ -134,7 +161,7 @@ class Version
 		if ($prev == '' && $data == '') {
 			$this->diff == 100;
 		} else {
-			Diff::compare($prev, $data, &$this->diff);
+			Diff::compare($prev, $data, $this->diff);
 		}
 		if ($this->diff < 90.000) {
 			$this->change = true;
@@ -147,10 +174,11 @@ class Version
 		if ($this->guid !== 0 && !empty($this->guid) && !empty($this->data)) {
 			$ver_query = 'INSERT INTO version (guid, body) VALUES (:guid, :body)';
 			$ver_obj = $this->dbh->prepare($ver_query);
-			$ver_obj->bindParams(':guid' => $this->guid, ':body' => $this->data);
+			$ver_obj->bindParam(':guid', $this->guid);
+			$ver_obj->bindParam(':body', $this->data);
 			try {
-				$ver_res = $ver_obj->execute();
-				if ($ver_res->rowCount() > 0) {
+				$ver_obj->execute();
+				if ($ver_obj->rowCount() > 0) {
 				 	$document = new Document();
 				 	$document->getDocument($guid);
 				 	$document->setVersion($this->num);
@@ -193,7 +221,6 @@ class Author
 		$this->dbh 			= new PDO('mysql:host=localhost;dbname=wa_cms', 'root', '');
 		$this->error 		= new Error();
 	}
-
 	function getAuthorByID($author_id) {
 		$this->id = $author_id;
 		$get_author_query = "SELECT * FROM author WHERE id = :id";
@@ -227,7 +254,8 @@ class Author
 			if (!empty($this->id) && $this->id !== '' && isset($this->id)) {
 				$update_author_query = "UPDATE author (role) VALUES (:role) WHERE id = :id";
 				$update_author_obj = $this->dbh->prepare($update_author_query);
-				$update_author_obj->bindParams(':id' => $this->id, ':role' => $role);
+				$update_author_obj->bindParam(':id', $this->id);
+				$update_author_obj->bindParam(':role', $role);
 				try {
 					$update_author_obj->execute();
 				} catch (PDOException $e) {
@@ -245,7 +273,8 @@ class Author
 		if (!empty($this->id) && $this->id !== '' && isset($this->id)) {
 			$update_author_query = "UPDATE author (screenname) VALUES (:name) WHERE id = :id";
 			$update_author_obj = $this->dbh->prepare($update_author_query);
-			$update_author_obj->bindParams(':id' => $this->id, ':name' => $new_name);
+			$update_author_obj->bindParam(':id', $this->id);
+			$update_author_obj->bindParam(':name', $new_name);
 			try {
 				$update_author_obj->execute();
 			} catch (PDOException $e) {
@@ -281,7 +310,7 @@ class Error
 		return $this->body[$length-1];
 	}
 	function clear() {
-		this->body 		= array();
+		$this->body 		= array();
 	}
 }
 ?>
