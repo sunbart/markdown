@@ -26,7 +26,7 @@ class Document
 		$this->author 		= new Author($author);;
 		$this->id 			= '';
 		// $this->editor 		= '';
-		// $this->latest		= '';
+		$this->latest		= 0;
 		$this->timestamp 	= new DateTime();
 		$this->version 		= new Version($this->timestamp);
 		$this->dbh 			= new PDO('mysql:host=localhost;dbname=wa_cms', 'root', '');
@@ -39,11 +39,12 @@ class Document
 			$get_doc_obj = $this->dbh->prepare($get_doc_query);
 			$get_doc_obj->bindParam(':id', $id);
 			$get_doc_obj->execute();
-			$get_doc_res = $get_doc_obj->fetch();
+			$get_doc_res = $get_doc_obj->fetchAll(PDO::FETCH_ASSOC);
 			var_dump($get_doc_res);
-			$this->author = $this->author->getAuthor($get_doc_res->author_id);
-			$this->timestamp = $get_doc_res->startdate;
-			$this->latest = $get_doc_res->latest;
+			// $this->author = $this->author->getAuthor($get_doc_res->author_id);
+			$this->timestamp = $get_doc_res[0]['start_time'];
+			$this->latest = $get_doc_res[0]['version'];
+			$this->id = $id;
 		} catch (PDOException $e) {
 			$this->error->add($this->timestamp, $e->message);
 			return 0;
@@ -51,12 +52,12 @@ class Document
 	}
 	function getVersion() {
 		try {
-			$get_doc_query = "SELECT version.body FROM document, version WHERE document.guid = :id AND document.guid = version.document_guid ORDER BY version.num DESC LIMIT 1";
+			$get_doc_query = "SELECT version.body FROM document, version WHERE document.guid = :id AND document.guid = version.document_guid";
 			$get_doc_obj = $this->dbh->prepare($get_doc_query);
 			$get_doc_obj->bindParam(':id', $this->id);
 			$get_doc_obj->execute();
 			$get_doc_res = $get_doc_obj->fetch();
-			var_dump($get_doc_obj);
+			var_dump($get_doc_res);
 			return $get_doc_res;
 			// $this->latest = $get_doc_obj->latest;
 		} catch (PDOException $e) {
