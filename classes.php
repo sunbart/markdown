@@ -1,6 +1,6 @@
 <?php
 
-require_once 'diff/Diff.php';
+require_once '/lib/diff/Diff.php';
 /**
 * the document base class.
 * @author Sergelia
@@ -25,8 +25,8 @@ class Document
 	{
 		$this->author 		= new Author($author);;
 		$this->id 			= '';
-		$this->editor 		= '';
-		$this->latest		= '';
+		// $this->editor 		= '';
+		// $this->latest		= '';
 		$this->timestamp 	= new DateTime();
 		$this->version 		= new Version($this->timestamp);
 		$this->dbh 			= new PDO('mysql:host=localhost;dbname=wa_cms', 'root', '');
@@ -34,10 +34,10 @@ class Document
 	}
 
 	function getDocument($id) {
-		$get_doc_query = "SELECT * FROM document WHERE guid = :id";
-		$get_doc_obj = $this->dbh->prepare($get_doc_query);
-		$get_doc_obj->bindParam(':id', $id);
 		try {
+			$get_doc_query = "SELECT * FROM document WHERE guid = :id";
+			$get_doc_obj = $this->dbh->prepare($get_doc_query);
+			$get_doc_obj->bindParam(':id', $id);
 			$get_doc_obj->execute();
 			$get_doc_res = $get_doc_obj->fetch();
 			var_dump($get_doc_res);
@@ -50,10 +50,10 @@ class Document
 		}
 	}
 	function getVersion() {
-		$get_doc_query = "SELECT version.body FROM document, version WHERE document.guid = :id AND document.guid = version.document_guid ORDER BY version.num DESC LIMIT 1";
-		$get_doc_obj = $this->dbh->prepare($get_doc_query);
-		$get_doc_obj->bindParam(':id', $this->id);
 		try {
+			$get_doc_query = "SELECT version.body FROM document, version WHERE document.guid = :id AND document.guid = version.document_guid ORDER BY version.num DESC LIMIT 1";
+			$get_doc_obj = $this->dbh->prepare($get_doc_query);
+			$get_doc_obj->bindParam(':id', $this->id);
 			$get_doc_obj->execute();
 			$get_doc_res = $get_doc_obj->fetch();
 			var_dump($get_doc_obj);
@@ -67,11 +67,10 @@ class Document
 	function setDocument($body) {
 		$author = 1;
 		if ($this->id == 0 || $this->version->id == 0) {
-			$set_doc_query = "INSERT INTO document (author_id) VALUES (:author_id)";
-			$set_doc_obj = $this->dbh->prepare($set_doc_query);
-			$set_doc_obj->bindParam(':author_id', $author);
-
 			try {
+				$set_doc_query = "INSERT INTO document (author_id) VALUES (:author_id)";
+				$set_doc_obj = $this->dbh->prepare($set_doc_query);
+				$set_doc_obj->bindParam(':author_id', $author);
 				$set_doc_obj->execute();
 				var_dump($set_doc_obj);
 				$set_doc_res = $set_doc_obj->fetch();
@@ -98,10 +97,10 @@ class Document
 	}
 	
 	function deleteDocument($id) {
-		$delete_doc_query = "DELETE FROM document WHERE guid = :id";
-		$delete_doc_obj = $this->dbh->prepare($delete_doc_query);
-		$delete_doc_obj->bindParam(':id', $id);
 		try {
+			$delete_doc_query = "DELETE FROM document WHERE guid = :id";
+			$delete_doc_obj = $this->dbh->prepare($delete_doc_query);
+			$delete_doc_obj->bindParam(':id', $id);
 			$delete_doc_obj->execute();
 		} catch (PDOException $e) {
 			$this->error->add($this->timestamp, $e->message);
