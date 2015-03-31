@@ -6,6 +6,18 @@ require_once 'diff/Diff.php';
 * @author Sergelia
 * @since 30/3/2015
 */
+
+/**************
+TODO: is the document new or is it being updated? 
+trigger INSERT only if new.
+otherwise, update version.
+
+TODO2: add comments for all functions
+
+TODO3: fix updating logic and ID retrieval
+
+
+**************/
 class Document 
 {
 	
@@ -38,7 +50,7 @@ class Document
 		}
 	}
 	function getVersion() {
-		$get_doc_query = "SELECT version.body FROM document, version WHERE document.guid = :id AND document.guid = version.guid ORDER BY version.num DESC LIMIT 1";
+		$get_doc_query = "SELECT version.body FROM document, version WHERE document.guid = :id AND document.guid = version.document_guid ORDER BY version.num DESC LIMIT 1";
 		$get_doc_obj = $this->dbh->prepare($get_doc_query);
 		$get_doc_obj->bindParam(':id', $this->id);
 		try {
@@ -53,38 +65,38 @@ class Document
 		}
 	}
 	function setDocument($body) {
-		$set_doc_query = "INSERT INTO document (author_id) VALUES (:author_id)";
-		$set_doc_obj = $this->dbh->prepare($set_doc_query);
 		$author = 1;
-		$set_doc_obj->bindParam(':author_id', $author);
+		if ($this->id == 0 || $this->version->id == 0) {
+			$set_doc_query = "INSERT INTO document (author_id) VALUES (:author_id)";
+			$set_doc_obj = $this->dbh->prepare($set_doc_query);
+			$set_doc_obj->bindParam(':author_id', $author);
 
-		try {
-			$set_doc_obj->execute();
-			var_dump($set_doc_obj);
-			$set_doc_res = $set_doc_obj->fetch();
-			var_dump($set_doc_res);
-			$this->id = $this->dbh->lastInsertID();
+			try {
+				$set_doc_obj->execute();
+				var_dump($set_doc_obj);
+				$set_doc_res = $set_doc_obj->fetch();
+				var_dump($set_doc_res);
+				// get document id based on the last inserted ID in the database.
+				$this->id = $this->dbh->lastInsertID();
+				// get the number of the last version of this document
+				$this->version->getNum($this->id);
+				// set new version data...
+				$this->version->setData($body);
+				// ... and store it in the database
+				$this->version->push();
+			} catch (PDOException $e) {
+				$this->error->add($this->timestamp, $e->message);
+				return 0;
+			}
+		} else {
 			$this->version->getNum($this->id);
+			// set new version data...
 			$this->version->setData($body);
+			// ... and store it in the database
 			$this->version->push();
-		} catch (PDOException $e) {
-			$this->error->add($this->timestamp, $e->message);
-			return 0;
 		}
 	}
-	function setVersion($vernum) {
-		$set_dver_query = "UPDATE document (version) VALUES (:version) WHERE guid = :guid";
-		$set_dver_obj = $this->dbh->prepare($set_dver_query);
-		$set_dver_obj->bindParam(':version', $vernum);
-		$set_dver_obj->bindParam(':guid', $this->id);
-		try {
-			$set_dver_res = $set_dver_obj->execute();
-			$this->version = $this->version->getVer($vernum);
-		} catch (PDOException $e) {
-			$this->error->add($this->timestamp, $e->message);
-			return 0;
-		}
-	}
+	
 	function deleteDocument($id) {
 		$delete_doc_query = "DELETE FROM document WHERE guid = :id";
 		$delete_doc_obj = $this->dbh->prepare($delete_doc_query);
@@ -121,12 +133,26 @@ class Version
 			$this->data = $data;
 		}
 	}
+	function setVersion($vernum, $guid) {
+		$set_dver_query = "UPDATE document (version) VALUES (:version) WHERE guid = :guid";
+		$set_dver_obj = $this->dbh->prepare($set_dver_query);
+		$set_dver_obj->bindParam(':version', $vernum);
+		$set_dver_obj->bindParam(':guid', $this->guid);
+		try {
+			$set_dver_res = $set_dver_obj->execute();
+			var_dump($this);
+		} catch (PDOException $e) {
+			$this->error->add($this->timestamp, $e->message);
+			return 0;
+		}
+	}
 	function getNum($guid) {
-		$get_ver_query = "SELECT ver_number FROM version WHERE version.guid = :guid";
+		$get_ver_query = "SELECT num FROM version WHERE version.document_guid = :guid";
 		$get_ver_obj = $this->dbh->prepare($get_ver_query);
 		$get_ver_obj->bindParam(':guid', $guid);
 		try {
-			$get_ver_res = $get_ver_obj->execute();
+			$get_ver_obj->execute();
+			$get_ver_res = $get_ver_obj->fetch();
 			if ($get_ver_obj->rowCount() > 0) {
 			 	$this->num = $get_ver_obj->rowCount() + 1;
 			} else {
@@ -139,7 +165,7 @@ class Version
 		}
 	}
 	function getVer($num) {
-		$get_ver_query = "SELECT * FROM version WHERE version.guid = :guid AND version.num = :num";
+		$get_ver_query = "SELECT * FROM version WHERE version.document_guid = :guid AND version.num = :num";
 		$get_ver_obj = $this->dbh->prepare($get_ver_query);
 		$get_ver_obj->bindParam(':guid', $guid);
 		$get_ver_obj->bindParam(':num', $num);
@@ -172,16 +198,14 @@ class Version
 	}
 	function push() {
 		if ($this->guid !== 0 && !empty($this->guid) && !empty($this->data)) {
-			$ver_query = 'INSERT INTO version (guid, body) VALUES (:guid, :body)';
+			$ver_query = 'INSERT INTO version (document_guid, body) VALUES (:guid, :body)';
 			$ver_obj = $this->dbh->prepare($ver_query);
 			$ver_obj->bindParam(':guid', $this->guid);
 			$ver_obj->bindParam(':body', $this->data);
 			try {
 				$ver_obj->execute();
 				if ($ver_obj->rowCount() > 0) {
-				 	$document = new Document();
-				 	$document->getDocument($guid);
-				 	$document->setVersion($this->num);
+				 	$this->setVersion($this->num, $this->guid);
 				} else {
 				   $this->num = 0;
 				}
