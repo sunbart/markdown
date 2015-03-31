@@ -16,5 +16,5 @@ if (isset($_POST['doc_body'])) {
 		echo 'Please insert some data and test insertion, updating and deletion.';
 	}
 }
-
+header('location: test.html');
 ?>
